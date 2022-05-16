@@ -9,6 +9,17 @@
 #include "camera.h"
 #include "material.h"
 
+// STB IMAGE FOR WRITING IMAGE FILES
+#ifndef STB_IMAGE_IMPLEMENTATION
+  #define STB_IMAGE_IMPLEMENTATION
+    #include "stb_image/stb_image.h"
+#endif /* STB_IMAGE_IMPLEMENTATION */
+
+#ifndef STB_IMAGE_WRITE_IMPLEMENTATION
+  #define STB_IMAGE_WRITE_IMPLEMENTATION
+    #include "stb_image/stb_image_write.h"
+#endif /* STB_IMAGE_WRITE_IMPLEMENTATION */
+
 // limited version of checkCudaErrors from helper_cuda.h in CUDA examples
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
 
@@ -200,17 +211,28 @@ int main() {
     double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
     std::cerr << "took " << timer_seconds << " seconds.\n";
 
+    int total_size = nx * ny * 3;
+    uint8_t* fileOutputImage = new uint8_t[total_size];
+
     // Output FB as Image
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    //std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+    int idx = 0;
     for (int j = ny-1; j >= 0; j--) {
         for (int i = 0; i < nx; i++) {
             size_t pixel_index = j*nx + i;
             int ir = int(255.99*fb[pixel_index].r());
             int ig = int(255.99*fb[pixel_index].g());
             int ib = int(255.99*fb[pixel_index].b());
-            std::cout << ir << " " << ig << " " << ib << "\n";
+            //std::cout << ir << " " << ig << " " << ib << "\n";
+            fileOutputImage[idx++] = ir;
+            fileOutputImage[idx++] = ig;
+            fileOutputImage[idx++] = ib;
         }
     }
+    std::cout << "total output bytes : " << idx << " width : " << nx << " height : " << ny << "\n";
+    stbi_write_png("out.png", nx, ny, 3, fileOutputImage, nx * 3);
+
+    delete [] fileOutputImage;
 
     // clean up
     checkCudaErrors(cudaDeviceSynchronize());
