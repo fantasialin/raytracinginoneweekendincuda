@@ -1,6 +1,7 @@
 #include <iostream>
 #include <time.h>
 #include <float.h>
+#include <string>
 #include <curand_kernel.h>
 #include "vec3.h"
 #include "ray.h"
@@ -156,15 +157,15 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
     delete *d_camera;
 }
 
-int main() {
+int main(int argc, char **argv) {
     int nx = 1200;
     int ny = 800;
     int ns = 10;
     int tx = 8;
     int ty = 8;
 
-    std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
-    std::cerr << "in " << tx << "x" << ty << " blocks.\n";
+    //std::cerr << "Rendering a " << nx << "x" << ny << " image with " << ns << " samples per pixel ";
+    //std::cerr << "in " << tx << "x" << ty << " blocks.\n";
 
     int num_pixels = nx*ny;
     size_t fb_size = num_pixels*sizeof(vec3);
@@ -197,40 +198,47 @@ int main() {
     checkCudaErrors(cudaDeviceSynchronize());
 
     clock_t start, stop;
-    start = clock();
-    // Render our buffer
-    dim3 blocks(nx/tx+1,ny/ty+1);
-    dim3 threads(tx,ty);
-    render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
-    checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaDeviceSynchronize());
-    render<<<blocks, threads>>>(fb, nx, ny,  ns, d_camera, d_world, d_rand_state);
-    checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaDeviceSynchronize());
-    stop = clock();
-    double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
-    std::cerr << "took " << timer_seconds << " seconds.\n";
-
+    int spp;
+    std::string outName = {};
     int total_size = nx * ny * 3;
     uint8_t* fileOutputImage = new uint8_t[total_size];
+    for(int it = 0; it <= 10; it++){
+        spp = ns + ns * it;
+        std::cerr << "Rendering a " << nx << "x" << ny << " image with " << spp << " samples per pixel ";
+        std::cerr << "in " << tx << "x" << ty << " blocks.\n";
+        start = clock();
+        // Render our buffer
+        dim3 blocks(nx/tx+1,ny/ty+1);
+        dim3 threads(tx,ty);
+        render_init<<<blocks, threads>>>(nx, ny, d_rand_state);
+        checkCudaErrors(cudaGetLastError());
+        checkCudaErrors(cudaDeviceSynchronize());
+        render<<<blocks, threads>>>(fb, nx, ny,  spp, d_camera, d_world, d_rand_state);
+        checkCudaErrors(cudaGetLastError());
+        checkCudaErrors(cudaDeviceSynchronize());
+        stop = clock();
+        double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
+        std::cerr << "took " << timer_seconds << " seconds.\n";
 
-    // Output FB as Image
-    //std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-    int idx = 0;
-    for (int j = ny-1; j >= 0; j--) {
-        for (int i = 0; i < nx; i++) {
-            size_t pixel_index = j*nx + i;
-            int ir = int(255.99*fb[pixel_index].r());
-            int ig = int(255.99*fb[pixel_index].g());
-            int ib = int(255.99*fb[pixel_index].b());
-            //std::cout << ir << " " << ig << " " << ib << "\n";
-            fileOutputImage[idx++] = ir;
-            fileOutputImage[idx++] = ig;
-            fileOutputImage[idx++] = ib;
+        // Output FB as Image
+        //std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+        int idx = 0;
+        for (int j = ny-1; j >= 0; j--) {
+            for (int i = 0; i < nx; i++) {
+                size_t pixel_index = j*nx + i;
+                int ir = int(255.99*fb[pixel_index].r());
+                int ig = int(255.99*fb[pixel_index].g());
+                int ib = int(255.99*fb[pixel_index].b());
+                //std::cout << ir << " " << ig << " " << ib << "\n";
+                fileOutputImage[idx++] = ir;
+                fileOutputImage[idx++] = ig;
+                fileOutputImage[idx++] = ib;
+            }
         }
+        outName = std::string("out_") + std::to_string(it) + std::string(".png");
+        std::cout << outName << " >> total output bytes : " << idx << " width : " << nx << " height : " << ny << "\n";
+        stbi_write_png(outName.c_str(), nx, ny, 3, fileOutputImage, nx * 3);
     }
-    std::cout << "total output bytes : " << idx << " width : " << nx << " height : " << ny << "\n";
-    stbi_write_png("out.png", nx, ny, 3, fileOutputImage, nx * 3);
 
     delete [] fileOutputImage;
 
